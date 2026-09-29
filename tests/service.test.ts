@@ -1,11 +1,12 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "truthlens-test-"));
 process.env.PGLITE_DIR = tmpDir;
 delete process.env.DATABASE_URL;
+process.env.YOUTUBE_TIMEOUT_MS = "1200";
 
 const { getRepository } = await import("@/lib/db");
 const service = await import("@/lib/service");
@@ -13,7 +14,74 @@ const service = await import("@/lib/service");
 const SESSION = "11111111-1111-4111-8111-111111111111";
 const OTHER_SESSION = "22222222-2222-4222-8222-222222222222";
 
+const CHANNEL_ID = "UCXuqSBlHAE6Xw-yeJA0Tunw";
+const RSS = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+  <title>Deterministic Test Channel</title>
+  <entry>
+    <yt:videoId>vid0000001</yt:videoId>
+    <yt:channelId>${CHANNEL_ID}</yt:channelId>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=vid0000001"/>
+    <title>How bridges stay standing: a clear look at load paths</title>
+    <author><name>Deterministic Test Channel</name></author>
+    <published>2026-09-01T10:00:00+00:00</published>
+    <media:group>
+      <media:description>We walk through the published engineering data and cite the structural reports.</media:description>
+      <media:thumbnail url="https://i.ytimg.com/vi/vid0000001/hqdefault.jpg"/>
+      <media:community><media:statistics views="120000"/></media:community>
+    </media:group>
+  </entry>
+  <entry>
+    <yt:videoId>vid0000002</yt:videoId>
+    <yt:channelId>${CHANNEL_ID}</yt:channelId>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=vid0000002"/>
+    <title>What the new telescope images actually show</title>
+    <author><name>Deterministic Test Channel</name></author>
+    <published>2026-08-25T10:00:00+00:00</published>
+    <media:group>
+      <media:description>We read the primary paper and explain what the data supports. References in the pinned comment.</media:description>
+      <media:thumbnail url="https://i.ytimg.com/vi/vid0000002/hqdefault.jpg"/>
+      <media:community><media:statistics views="88000"/></media:community>
+    </media:group>
+  </entry>
+  <entry>
+    <yt:videoId>vid0000003</yt:videoId>
+    <yt:channelId>${CHANNEL_ID}</yt:channelId>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=vid0000003"/>
+    <title>A reproducible method for measuring small oscillations</title>
+    <author><name>Deterministic Test Channel</name></author>
+    <published>2026-08-19T10:00:00+00:00</published>
+    <media:group>
+      <media:description>Full protocol and dataset are linked below. Sponsored segment clearly disclosed.</media:description>
+      <media:thumbnail url="https://i.ytimg.com/vi/vid0000003/hqdefault.jpg"/>
+      <media:community><media:statistics views="64000"/></media:community>
+    </media:group>
+  </entry>
+</feed>`;
+
+const realFetch = globalThis.fetch;
+
+beforeAll(() => {
+  // Serve a deterministic public-feed shape so this suite exercises the real
+  // normalization, engine, persistence, and audit paths without depending on
+  // third-party network availability.
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes("youtube.com/feeds/videos.xml")) {
+      return new Response(RSS, { status: 200, headers: { "Content-Type": "application/xml" } });
+    }
+    if (url.includes("youtube.com/@")) {
+      return new Response(
+        `<html><link rel="alternate" href="https://www.youtube.com/feeds/videos.xml?channel_id=${CHANNEL_ID}"></html>`,
+        { status: 200, headers: { "Content-Type": "text/html" } },
+      );
+    }
+    return realFetch(input as RequestInfo, init);
+  }) as typeof fetch;
+});
+
 afterAll(() => {
+  globalThis.fetch = realFetch;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -33,7 +101,9 @@ describe("service layer integration", () => {
     expect(report.id).toBeTruthy();
     expect(engine.score).toBe(report.score);
     expect(seal).toHaveLength(96);
-    expect(["live", "fallback"]).toContain(report.feed_status);
+    expect(report.feed_status).toBe("live");
+    expect(report.channel_id).toBe(CHANNEL_ID);
+    expect(report.video_count).toBe(3);
 
     const repo = await getRepository();
     const readBack = await repo.getReport(report.id, SESSION);

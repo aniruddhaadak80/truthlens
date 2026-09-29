@@ -49,4 +49,8 @@ playwright-report/
 .playwright/
 *.log
 
+# local developer helper scripts
+.vc-*
+.vercel-*.bat
+
 .vercel

@@ -4,7 +4,6 @@ import { ApiError } from "@/lib/api-helpers";
 import { fetchFeedFor, parseChannelInput } from "@/lib/youtube/fetch";
 import { verifyChain } from "@/lib/integrity/chain";
 import { DEFAULT_WEIGHTS, type EngineResult, type ReportRow } from "@/lib/types";
-import { VERDICTS } from "@/lib/verdicts";
 
 export interface AnalyzeResult {
   report: ReportRow;

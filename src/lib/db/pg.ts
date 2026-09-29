@@ -179,7 +179,8 @@ export async function createPgRepository(connectionString: string): Promise<Repo
       try {
         await client.query("BEGIN");
         const last = await client.query<{ seal: string }>(
-          `SELECT seal FROM audit_events ORDER BY id DESC LIMIT 1`,
+          `SELECT seal FROM audit_events WHERE entity_id = $1 AND entity_type = $2 ORDER BY id DESC LIMIT 1`,
+          [event.entity_id, event.entity_type],
         );
         const prevSeal = last.rows.length ? (last.rows[0] as { seal: string }).seal : "GENESIS";
         const { computeSeal, genesisSeal } = await import("@/lib/integrity/chain");

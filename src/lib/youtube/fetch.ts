@@ -3,7 +3,7 @@ import { getFallbackFeed } from "./fallback";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-const TIMEOUT_MS = 8000;
+const TIMEOUT_MS = Number(process.env.YOUTUBE_TIMEOUT_MS ?? 8000);
 const MAX_VIDEOS = 24;
 
 export type ParsedInput =

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local developer helper scripts, not part of the shipped app.
+    "**/.vc-*",
+    "**/scripts/*.cjs",
   ]),
 ]);
 

@@ -177,7 +177,10 @@ export async function createPgliteRepository(): Promise<Repository> {
       payload: Record<string, unknown>;
     }): Promise<AuditRow> {
       const created = await client.transaction(async (tx) => {
-        const last = await tx.query<{ seal: string }>(`SELECT seal FROM audit_events ORDER BY id DESC LIMIT 1`);
+        const last = await tx.query<{ seal: string }>(
+          `SELECT seal FROM audit_events WHERE entity_id = $1 AND entity_type = $2 ORDER BY id DESC LIMIT 1`,
+          [event.entity_id, event.entity_type],
+        );
         const prevSeal = last.rows.length ? (last.rows[0] as { seal: string }).seal : "GENESIS";
         const { computeSeal, genesisSeal } = await import("@/lib/integrity/chain");
         const base = prevSeal === "GENESIS" ? genesisSeal() : prevSeal;

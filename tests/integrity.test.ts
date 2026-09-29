@@ -8,18 +8,29 @@ import {
 import type { AuditRow } from "@/lib/types";
 
 function event(id: number, prevSeal: string, action: string, created_at: string): AuditRow {
+  return sealEvent(id, `r${id}`, prevSeal, action, created_at);
+}
+
+function sealEvent(
+  id: number,
+  entityId: string,
+  prevSeal: string,
+  action: string,
+  created_at: string,
+): AuditRow {
+  const payload = { action, n: id };
   return {
     id,
     session_id: "s1",
     entity_type: "report",
-    entity_id: `r${id}`,
+    entity_id: entityId,
     action,
-    payload: { action, n: id },
+    payload,
     seal: computeSeal(prevSeal, {
       entity_type: "report",
-      entity_id: `r${id}`,
+      entity_id: entityId,
       action,
-      payload: { action, n: id },
+      payload,
       created_at,
     }),
     created_at,
@@ -78,5 +89,21 @@ describe("integrity chain", () => {
   it("genesis seal is stable", () => {
     expect(genesisSeal()).toBe(genesisSeal());
     expect(genesisSeal()).toHaveLength(96);
+  });
+
+  it("verifies each entity chain independently from genesis", () => {
+    // Each entity's chain is sealed against its own previous seal, so an
+    // entity's events replay correctly in isolation even though other
+    // entities were appended in between.
+    const a1 = sealEvent(1, "ra", genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const b1 = sealEvent(2, "rb", genesisSeal(), "create", "2026-02-02T00:00:00.000Z");
+    const a2 = sealEvent(3, "ra", a1.seal, "update", "2026-02-03T00:00:00.000Z");
+
+    const entityA = verifyChain([a1, a2]);
+    expect(entityA.ok).toBe(true);
+    expect(entityA.total).toBe(2);
+
+    const entityB = verifyChain([b1]);
+    expect(entityB.ok).toBe(true);
   });
 });
