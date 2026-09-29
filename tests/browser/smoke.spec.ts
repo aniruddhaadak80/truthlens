@@ -12,7 +12,7 @@ async function analyzeChannel(page: Page, url: string) {
   await page.waitForFunction(
     () => {
       const b = document.querySelector("button[type=submit]");
-      return b && !b.disabled;
+      return b instanceof HTMLButtonElement && !b.disabled;
     },
     null,
     { timeout: 45000 },
@@ -112,7 +112,7 @@ test.describe("TruthLens primary journey", () => {
     await page.waitForFunction(
       () => {
         const b = document.querySelector("button[type=submit]");
-        return b && !b.disabled;
+        return b instanceof HTMLButtonElement && !b.disabled;
       },
       null,
       { timeout: 45000 },
