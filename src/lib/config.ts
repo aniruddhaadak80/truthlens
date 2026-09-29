@@ -4,7 +4,7 @@ export const siteConfig = {
   description:
     "Paste any YouTube channel link. TruthLens refracts the channel's public video record into an evidence-backed credibility report — claim discipline, controversy temperature, clickbait pressure, sentiment balance, cadence, and transparency — scored by a deterministic, explainable engine.",
   repoUrl: "https://github.com/aniruddhaadak80/truthlens",
-  liveUrl: "https://truthlens.vercel.app",
+  liveUrl: "https://truthlens-virid.vercel.app",
   engineVersion: "2026.1.0",
 } as const;
 

@@ -125,7 +125,7 @@ async function main() {
       jsonrpc: "2.0",
       id: 3,
       method: "tools/call",
-      params: { name: "update_report_decision", arguments: { report_id: reportId, note: "mcp mutation proof", idempotency_key: "live-verify-key" } },
+      params: { name: "update_report_decision", arguments: { report_id: reportId, note: "mcp mutation proof", idempotency_key: `live-verify-${Date.now()}` } },
     }),
   });
   const mcpCall = await res9.json();
@@ -136,6 +136,37 @@ async function main() {
   check(
     "MCP mutation is persisted (read-back proves it)",
     afterMcp?.report?.note === "mcp mutation proof",
+  );
+
+  const idemKey = `live-verify-${reportId}`;
+  const res10a = await call(`/api/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tools/call",
+      params: { name: "update_report_decision", arguments: { report_id: reportId, note: "first write", idempotency_key: idemKey } },
+    }),
+  });
+  await res10a.json();
+  const res10b = await call(`/api/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "update_report_decision", arguments: { report_id: reportId, note: "second write", idempotency_key: idemKey } },
+    }),
+  });
+  const idemRetry = await res10b.json();
+  const res10c = await call(`/api/reports/${reportId}`);
+  const afterIdem = await res10c.json();
+  check(
+    "agent mutations are idempotent (replayed key does not double-apply)",
+    afterIdem?.report?.note === "first write",
+    afterIdem?.report?.note,
   );
 
   const res11 = await call(`/api/verify?entity=${reportId}`);

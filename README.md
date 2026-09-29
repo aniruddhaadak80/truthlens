@@ -4,14 +4,14 @@
 evidence-backed credibility report — every score traced to the exact phrases that
 produced it.
 
-[![Live App](https://img.shields.io/badge/live-truthlens.vercel.app-22d3ee?style=flat-square&logo=vercel)](https://truthlens.vercel.app)
+[![Live App](https://img.shields.io/badge/live%20app-22d3ee?style=flat-square&logo=vercel)](https://truthlens-virid.vercel.app)
 [![GitHub](https://img.shields.io/badge/github-aniruddhaadak80%2Ftruthlens-a78bfa?style=flat-square&logo=github)](https://github.com/aniruddhaadak80/truthlens)
 [![License](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)](LICENSE)
 [![Stack](https://img.shields.io/badge/stack-Next.js%2016%20%2B%20Neon%20Postgres-fbbf24?style=flat-square)](https://nextjs.org)
 [![Engine](https://img.shields.io/badge/engine-deterministic%20v2026.1.0-a78bfa?style=flat-square)](src/lib/engine/credibility.ts)
 [![Agent](https://img.shields.io/badge/agent-MCP%20JSON--RPC%202.0-34d399?style=flat-square)](public/mcp.json)
 
-| [Live App](https://truthlens.vercel.app) · [GitHub](https://github.com/aniruddhaadak80/truthlens) · [API](https://truthlens.vercel.app/api/health) · [Agent](https://truthlens.vercel.app/agent) · [Issues](https://github.com/aniruddhaadak80/truthlens/issues) |
+| [Live App](https://truthlens-virid.vercel.app) · [GitHub](https://github.com/aniruddhaadak80/truthlens) · [API](https://truthlens-virid.vercel.app/api/health) · [Agent](https://truthlens-virid.vercel.app/agent) · [Issues](https://github.com/aniruddhaadak80/truthlens/issues) |
 
 ![TruthLens report for a YouTube channel](docs/screenshot.png)
 
@@ -65,7 +65,7 @@ All endpoints return JSON. Errors use the envelope `{ "error": { "code", "messag
 ### Analyze a channel
 
 ```bash
-curl -X POST https://truthlens.vercel.app/api/analyze \
+curl -X POST https://truthlens-virid.vercel.app/api/analyze \
   -H 'Content-Type: application/json' \
   -d '{"url":"https://www.youtube.com/@veritasium"}'
 ```
@@ -76,9 +76,9 @@ itemized `factors`, `signals`, `recommendation`), and the `audit` seal reference
 ### Read back and update
 
 ```bash
-curl https://truthlens.vercel.app/api/reports/<report-id>
+curl https://truthlens-virid.vercel.app/api/reports/<report-id>
 
-curl -X PATCH https://truthlens.vercel.app/api/reports/<report-id> \
+curl -X PATCH https://truthlens-virid.vercel.app/api/reports/<report-id> \
   -H 'Content-Type: application/json' \
   -d '{"note":"Great science communication","user_verdict":"trusted"}'
 ```
@@ -86,7 +86,7 @@ curl -X PATCH https://truthlens.vercel.app/api/reports/<report-id> \
 ### Delete
 
 ```bash
-curl -X DELETE https://truthlens.vercel.app/api/reports/<report-id>
+curl -X DELETE https://truthlens-virid.vercel.app/api/reports/<report-id>
 ```
 
 Soft-deletes (tombstone) and appends a `delete` audit event.
@@ -105,18 +105,18 @@ Soft-deletes (tombstone) and appends a `delete` audit event.
 ## 🤖 Agent interface
 
 TruthLens exposes a live MCP-style endpoint. Configure any MCP client with the
-manifest at `https://truthlens.vercel.app/mcp.json` (endpoint `POST /api/mcp`).
+manifest at `https://truthlens-virid.vercel.app/mcp.json` (endpoint `POST /api/mcp`).
 
 Tools: `analyze_channel`, `get_report`, `list_reports`,
 `update_report_decision` (mutating, idempotent), `verify_integrity`.
 
 ```bash
-curl -X POST https://truthlens.vercel.app/api/mcp \
+curl -X POST https://truthlens-virid.vercel.app/api/mcp \
   -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-The in-page [agent console](https://truthlens.vercel.app/agent) provides one-click
+The in-page [agent console](https://truthlens-virid.vercel.app/agent) provides one-click
 calls and a raw request/response log.
 
 ## 📁 Project map
