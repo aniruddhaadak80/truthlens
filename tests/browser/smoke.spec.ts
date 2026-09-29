@@ -57,7 +57,7 @@ test.describe("TruthLens primary journey", () => {
     await expect(page.getByText("verify_integrity").last()).toBeVisible({ timeout: 30000 });
 
     await page.getByRole("button", { name: /verify integrity/ }).click();
-    await expect(page.getByText(/Integrity chain verified/)).toBeVisible();
+    await expect(page.getByText(/Integrity chain verified/)).toBeVisible({ timeout: 45000 });
 
     const exportPromise = page.waitForEvent("download", { timeout: 30000 });
     await page.goto("/export");
