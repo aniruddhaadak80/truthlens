@@ -110,13 +110,39 @@ describe("integrity chain", () => {
 });
 
 describe("ledger verification", () => {
+  function scopedEvent(
+    id: number,
+    entityId: string,
+    prevSeal: string,
+    action: string,
+    created_at: string,
+  ): AuditRow {
+    const payload = { action, n: id, chain_scope: "entity" };
+    return {
+      id,
+      session_id: "s1",
+      entity_type: "report",
+      entity_id: entityId,
+      action,
+      payload,
+      seal: computeSeal(prevSeal, {
+        entity_type: "report",
+        entity_id: entityId,
+        action,
+        payload,
+        created_at,
+      }),
+      created_at,
+    };
+  }
+
   it("verifies interleaved entity chains as a ledger", () => {
     // Entities interleave by write time, so a single global sequence is not a
     // valid chain. The ledger must verify each entity on its own.
-    const a1 = sealEvent(1, "ra", genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
-    const b1 = sealEvent(2, "rb", genesisSeal(), "create", "2026-02-02T00:00:00.000Z");
-    const a2 = sealEvent(3, "ra", a1.seal, "update", "2026-02-03T00:00:00.000Z");
-    const b2 = sealEvent(4, "rb", b1.seal, "delete", "2026-02-04T00:00:00.000Z");
+    const a1 = scopedEvent(1, "ra", genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const b1 = scopedEvent(2, "rb", genesisSeal(), "create", "2026-02-02T00:00:00.000Z");
+    const a2 = scopedEvent(3, "ra", a1.seal, "update", "2026-02-03T00:00:00.000Z");
+    const b2 = scopedEvent(4, "rb", b1.seal, "delete", "2026-02-04T00:00:00.000Z");
 
     const ledger = verifyLedger([a1, b1, a2, b2]);
     expect(ledger.ok).toBe(true);
@@ -125,11 +151,35 @@ describe("ledger verification", () => {
     expect(ledger.firstBrokenId).toBeNull();
   });
 
+  it("replays legacy global-chained rows alongside entity-scoped rows", () => {
+    // Rows written before the per-entity rule are append-only and must not be
+    // rewritten, so the ledger replays them under their original rule.
+    const legacy1 = event(1, genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const legacy2 = event(2, legacy1.seal, "update", "2026-02-02T00:00:00.000Z");
+    const legacy3 = event(3, legacy2.seal, "delete", "2026-02-03T00:00:00.000Z");
+    const modern = scopedEvent(4, "rmodern", genesisSeal(), "create", "2026-02-04T00:00:00.000Z");
+
+    const ledger = verifyLedger([legacy1, legacy2, legacy3, modern]);
+    expect(ledger.ok).toBe(true);
+    expect(ledger.total).toBe(4);
+    expect(ledger.entities).toBe(2);
+  });
+
+  it("still detects tampering in a legacy global chain", () => {
+    const legacy1 = event(1, genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const legacy2 = event(2, legacy1.seal, "update", "2026-02-02T00:00:00.000Z");
+    const tampered = { ...legacy2, payload: { action: "delete", n: 2 } };
+
+    const ledger = verifyLedger([legacy1, tampered]);
+    expect(ledger.ok).toBe(false);
+    expect(ledger.firstBrokenId).toBe(2);
+  });
+
   it("reports the first broken link inside a tampered entity", () => {
-    const a1 = sealEvent(1, "ra", genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
-    const b1 = sealEvent(2, "rb", genesisSeal(), "create", "2026-02-02T00:00:00.000Z");
-    const a2 = sealEvent(3, "ra", a1.seal, "update", "2026-02-03T00:00:00.000Z");
-    const tampered = { ...a2, payload: { action: "delete", n: 3 } };
+    const a1 = scopedEvent(1, "ra", genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const b1 = scopedEvent(2, "rb", genesisSeal(), "create", "2026-02-02T00:00:00.000Z");
+    const a2 = scopedEvent(3, "ra", a1.seal, "update", "2026-02-03T00:00:00.000Z");
+    const tampered = { ...a2, payload: { action: "delete", n: 3, chain_scope: "entity" } };
 
     const ledger = verifyLedger([a1, b1, tampered]);
     expect(ledger.ok).toBe(false);

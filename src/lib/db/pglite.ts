@@ -220,17 +220,18 @@ export async function createPgliteRepository(): Promise<Repository> {
         const { computeSeal, genesisSeal } = await import("@/lib/integrity/chain");
         const base = prevSeal === "GENESIS" ? genesisSeal() : prevSeal;
         const createdAt = new Date().toISOString();
+        const payload = { ...event.payload, chain_scope: "entity" };
         const seal = computeSeal(base, {
           entity_type: event.entity_type,
           entity_id: event.entity_id,
           action: event.action,
-          payload: event.payload,
+          payload,
           created_at: createdAt,
         });
         const res = await tx.query(
           `INSERT INTO audit_events (session_id, entity_type, entity_id, action, payload, seal, created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-          [event.session_id, event.entity_type, event.entity_id, event.action, JSON.stringify(event.payload), seal, createdAt],
+          [event.session_id, event.entity_type, event.entity_id, event.action, JSON.stringify(payload), seal, createdAt],
         );
         return mapAudit(res.rows[0] as AuditRecord);
       });

@@ -63,15 +63,29 @@ export function verifyChain(events: AuditRow[]): ChainVerification {
 }
 
 /**
- * Verify the whole ledger. Each entity is sealed against its own previous
- * event, so a single interleaved sequence is not a valid chain to replay —
- * entities interleave by write time. Grouping by entity and replaying each
- * independently is the correct model and is what a tamperer cannot exploit
- * without rewriting that entity's whole history.
+ * Verify the whole ledger.
+ *
+ * Events are sealed under one of two rules, recorded in the payload as
+ * `chain_scope`:
+ *
+ * - `entity` (current): an event is sealed against the previous event of the
+ *   same entity, so each report replays independently.
+ * - absent (legacy): the event was sealed against the previous event in the
+ *   whole ledger, in id order.
+ *
+ * Audit rows are append-only, so legacy rows are never rewritten to the newer
+ * rule. Instead each row is replayed under the rule it was actually written
+ * with, which keeps the guarantee honest in both directions: no tampering is
+ * masked, and a scheme change is not reported as tampering.
  */
 export function verifyLedger(events: AuditRow[]): ChainVerification & { entities: number } {
+  const isEntityScoped = (e: AuditRow) => e.payload?.chain_scope === "entity";
+
+  const legacy = events.filter((e) => !isEntityScoped(e));
+  const scoped = events.filter(isEntityScoped);
+
   const groups = new Map<string, AuditRow[]>();
-  for (const e of events) {
+  for (const e of scoped) {
     const key = `${e.entity_type}:${e.entity_id}`;
     const list = groups.get(key);
     if (list) list.push(e);
@@ -80,18 +94,24 @@ export function verifyLedger(events: AuditRow[]): ChainVerification & { entities
 
   let brokenId: number | null = null;
   let headSeal = genesisSeal();
-  let total = 0;
 
-  for (const [, group] of [...groups.entries()].sort((a, b) => {
-    const ai = Math.min(...a[1].map((e) => e.id));
-    const bi = Math.min(...b[1].map((e) => e.id));
-    return ai - bi;
-  })) {
-    const result = verifyChain(group);
-    total += group.length;
+  // Legacy rows form one chain in id order, exactly as they were sealed.
+  if (legacy.length > 0) {
+    const result = verifyChain(legacy);
     if (!result.ok && brokenId === null) brokenId = result.firstBrokenId;
-    if (result.total > 0) headSeal = result.headSeal;
+    headSeal = result.headSeal;
   }
 
-  return { ok: brokenId === null, total, firstBrokenId: brokenId, headSeal, entities: groups.size };
+  for (const group of groups.values()) {
+    const result = verifyChain(group);
+    if (!result.ok && brokenId === null) brokenId = result.firstBrokenId;
+  }
+
+  return {
+    ok: brokenId === null,
+    total: events.length,
+    firstBrokenId: brokenId,
+    headSeal,
+    entities: groups.size + (legacy.length > 0 ? 1 : 0),
+  };
 }
