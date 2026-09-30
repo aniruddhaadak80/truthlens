@@ -192,4 +192,21 @@ describe("ledger verification", () => {
     expect(ledger.entities).toBe(0);
     expect(ledger.total).toBe(0);
   });
+
+  it("verifies self-contained rows that were sealed before prev_seal was recorded", () => {
+    // Rows written before the predecessor was recorded in the payload chain by
+    // position. Ones written under the per-entity rule are roots of their own
+    // chain, so they must verify without being rewritten.
+    const legacy1 = event(1, genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const selfContained = sealEvent(2, "rx", genesisSeal(), "create", "2026-02-02T00:00:00.000Z");
+    const ledger = verifyLedger([legacy1, selfContained]);
+    expect(ledger.ok).toBe(true);
+    expect(ledger.total).toBe(2);
+  });
+
+  it("still detects tampering when a row is a self-contained root", () => {
+    const a = sealEvent(1, "rx", genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const tampered = { ...a, payload: { action: "delete", n: 1 } };
+    expect(verifyLedger([a, tampered]).ok).toBe(false);
+  });
 });

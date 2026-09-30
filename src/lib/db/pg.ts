@@ -221,7 +221,7 @@ export async function createPgRepository(connectionString: string): Promise<Repo
         const { computeSeal, genesisSeal } = await import("@/lib/integrity/chain");
         const base = prevSeal === "GENESIS" ? genesisSeal() : prevSeal;
         const createdAt = new Date().toISOString();
-        const payload = { ...event.payload, chain_scope: "entity" };
+        const payload = { ...event.payload, chain_scope: "entity", prev_seal: base };
         const seal = computeSeal(base, {
           entity_type: event.entity_type,
           entity_id: event.entity_id,
