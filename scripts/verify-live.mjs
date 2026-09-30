@@ -74,10 +74,17 @@ async function main() {
     typeof engine?.version === "string" &&
       typeof engine?.score === "number" &&
       Array.isArray(engine?.factors) &&
-      engine.factors.length === 6 &&
+      engine.factors.length === 8 &&
       typeof engine?.recommendation === "string" &&
+      typeof engine?.transcriptCoverage?.status === "string" &&
+      Array.isArray(engine?.claims?.claims) &&
       typeof analyze?.audit?.seal === "string" &&
       analyze.audit.seal.length === 96,
+    JSON.stringify({
+      version: engine?.version,
+      factors: engine?.factors?.length,
+      coverage: engine?.transcriptCoverage?.status,
+    }),
   );
 
   const res5 = await call(`/api/reports/${reportId}`);
