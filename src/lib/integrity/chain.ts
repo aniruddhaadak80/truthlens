@@ -61,3 +61,37 @@ export function verifyChain(events: AuditRow[]): ChainVerification {
   }
   return { ok: true, total: sorted.length, firstBrokenId: null, headSeal: prev };
 }
+
+/**
+ * Verify the whole ledger. Each entity is sealed against its own previous
+ * event, so a single interleaved sequence is not a valid chain to replay —
+ * entities interleave by write time. Grouping by entity and replaying each
+ * independently is the correct model and is what a tamperer cannot exploit
+ * without rewriting that entity's whole history.
+ */
+export function verifyLedger(events: AuditRow[]): ChainVerification & { entities: number } {
+  const groups = new Map<string, AuditRow[]>();
+  for (const e of events) {
+    const key = `${e.entity_type}:${e.entity_id}`;
+    const list = groups.get(key);
+    if (list) list.push(e);
+    else groups.set(key, [e]);
+  }
+
+  let brokenId: number | null = null;
+  let headSeal = genesisSeal();
+  let total = 0;
+
+  for (const [, group] of [...groups.entries()].sort((a, b) => {
+    const ai = Math.min(...a[1].map((e) => e.id));
+    const bi = Math.min(...b[1].map((e) => e.id));
+    return ai - bi;
+  })) {
+    const result = verifyChain(group);
+    total += group.length;
+    if (!result.ok && brokenId === null) brokenId = result.firstBrokenId;
+    if (result.total > 0) headSeal = result.headSeal;
+  }
+
+  return { ok: brokenId === null, total, firstBrokenId: brokenId, headSeal, entities: groups.size };
+}

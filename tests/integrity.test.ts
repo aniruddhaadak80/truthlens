@@ -4,6 +4,7 @@ import {
   computeSeal,
   genesisSeal,
   verifyChain,
+  verifyLedger,
 } from "@/lib/integrity/chain";
 import type { AuditRow } from "@/lib/types";
 
@@ -105,5 +106,40 @@ describe("integrity chain", () => {
 
     const entityB = verifyChain([b1]);
     expect(entityB.ok).toBe(true);
+  });
+});
+
+describe("ledger verification", () => {
+  it("verifies interleaved entity chains as a ledger", () => {
+    // Entities interleave by write time, so a single global sequence is not a
+    // valid chain. The ledger must verify each entity on its own.
+    const a1 = sealEvent(1, "ra", genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const b1 = sealEvent(2, "rb", genesisSeal(), "create", "2026-02-02T00:00:00.000Z");
+    const a2 = sealEvent(3, "ra", a1.seal, "update", "2026-02-03T00:00:00.000Z");
+    const b2 = sealEvent(4, "rb", b1.seal, "delete", "2026-02-04T00:00:00.000Z");
+
+    const ledger = verifyLedger([a1, b1, a2, b2]);
+    expect(ledger.ok).toBe(true);
+    expect(ledger.entities).toBe(2);
+    expect(ledger.total).toBe(4);
+    expect(ledger.firstBrokenId).toBeNull();
+  });
+
+  it("reports the first broken link inside a tampered entity", () => {
+    const a1 = sealEvent(1, "ra", genesisSeal(), "create", "2026-02-01T00:00:00.000Z");
+    const b1 = sealEvent(2, "rb", genesisSeal(), "create", "2026-02-02T00:00:00.000Z");
+    const a2 = sealEvent(3, "ra", a1.seal, "update", "2026-02-03T00:00:00.000Z");
+    const tampered = { ...a2, payload: { action: "delete", n: 3 } };
+
+    const ledger = verifyLedger([a1, b1, tampered]);
+    expect(ledger.ok).toBe(false);
+    expect(ledger.firstBrokenId).toBe(3);
+  });
+
+  it("treats an empty ledger as verified", () => {
+    const ledger = verifyLedger([]);
+    expect(ledger.ok).toBe(true);
+    expect(ledger.entities).toBe(0);
+    expect(ledger.total).toBe(0);
   });
 });

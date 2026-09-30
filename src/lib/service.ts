@@ -3,7 +3,7 @@ import { getRepository } from "@/lib/db";
 import { ApiError } from "@/lib/api-helpers";
 import { fetchFeedFor, parseChannelInput } from "@/lib/youtube/fetch";
 import { fetchTranscripts } from "@/lib/youtube/transcript";
-import { verifyChain } from "@/lib/integrity/chain";
+import { verifyChain, verifyLedger } from "@/lib/integrity/chain";
 import { DEFAULT_WEIGHTS, FACTOR_LABELS, type EngineResult, type ReportRow } from "@/lib/types";
 import type { Comparison, DriftReport } from "@/lib/db/repository";
 
@@ -350,11 +350,14 @@ export async function verifyIntegrity(entityId?: string): Promise<{
   total: number;
   firstBrokenId: number | null;
   headSeal: string;
+  entities?: number;
   entityId?: string;
 }> {
   const repo = await getRepository();
   const events = await repo.listAudit(entityId ? "report" : undefined, entityId, 500);
-  const result = verifyChain(events);
+  // A scoped check is a single entity chain; a global check replays every
+  // entity chain independently, because entities interleave by write time.
+  const result = entityId ? verifyChain(events) : verifyLedger(events);
   return { ...result, entityId };
 }
 

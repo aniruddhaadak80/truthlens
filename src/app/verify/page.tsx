@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getRepository } from "@/lib/db";
-import { verifyChain } from "@/lib/integrity/chain";
+import { verifyLedger } from "@/lib/integrity/chain";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,7 @@ export const metadata = { title: "Verify integrity" };
 export default async function VerifyPage() {
   const repo = await getRepository();
   const events = await repo.listAudit(undefined, undefined, 500);
-  const chain = verifyChain(events);
+  const chain = verifyLedger(events);
   const recent = events.slice(0, 12);
 
   return (
@@ -19,7 +19,8 @@ export default async function VerifyPage() {
       <p className="mt-1 max-w-2xl text-sm text-fog">
         Every create, update, and delete appends an event sealed with{" "}
         <code className="font-mono text-xs text-snow">SHA-384(prevSeal ‖ canonicalJson(event))</code>.
-        Replay the chain to detect any tampering.
+        Replay the chain to detect any tampering. Each entity is sealed against its
+        own previous event, so every report replays independently.
       </p>
 
       <div className="panel mt-8 flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center">
@@ -42,7 +43,9 @@ export default async function VerifyPage() {
         </span>
         <div>
           <p className="text-sm font-semibold text-snow">
-            {chain.ok ? "Chain verified — no broken links" : `Chain broken at event #${chain.firstBrokenId}`}
+            {chain.ok
+              ? `All ${chain.entities} entity chain${chain.entities === 1 ? "" : "s"} verified`
+              : `Chain broken at event #${chain.firstBrokenId}`}
           </p>
           <p className="mt-0.5 font-mono text-xs text-fog">
             {chain.total} events · head seal {chain.headSeal.slice(0, 24)}…

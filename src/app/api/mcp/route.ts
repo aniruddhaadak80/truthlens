@@ -214,7 +214,7 @@ async function handleToolCall(
           {
             type: "text",
             text: result.ok
-              ? `Integrity chain verified: ${result.total} event(s), no broken links.`
+              ? `Integrity chain verified: ${result.total} event(s) across ${result.entities ?? 1} entity chain(s), no broken links.`
               : `Integrity chain BROKEN at event ${result.firstBrokenId} of ${result.total}.`,
           },
         ],
