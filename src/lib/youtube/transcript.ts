@@ -50,21 +50,72 @@ interface CaptionTrack {
   name?: { simpleText?: string };
 }
 
-/** Pull the caption track list out of the watch page's embedded player response. */
+/**
+ * Pull the caption track list out of the watch page's embedded player response.
+ * YouTube sometimes returns an empty body for the timedtext URL it embeds, so
+ * this also tries the innertube player endpoint before giving up.
+ */
 async function findCaptionTrack(videoId: string): Promise<CaptionTrack | null> {
   const html = await get(`https://www.youtube.com/watch?v=${videoId}&hl=en`);
-  const marker = html.indexOf('"playerCaptionsTracklistRenderer"');
-  if (marker === -1) return null;
 
-  // Walk forward through the balanced object so nested braces do not truncate the parse.
-  const start = html.lastIndexOf("{", marker);
-  if (start === -1) return null;
+  const fromPage = extractCaptionTracks(html);
+  if (fromPage) {
+    const usable = await firstTrackWithPayload(fromPage);
+    if (usable) return usable;
+  }
+
+  // Second strategy: ask the player endpoint directly using the client key
+  // that the page itself advertises, so nothing is hard-coded.
+  const key = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1];
+  const clientVersion = html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/)?.[1];
+  if (!key) return null;
+
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/youtubei/v1/player?key=${key}&prettyPrint=false`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": UA,
+          "Origin": "https://www.youtube.com",
+        },
+        body: JSON.stringify({
+          videoId,
+          context: {
+            client: { clientName: "WEB", clientVersion: clientVersion ?? "2.20240101.00.00", hl: "en", gl: "US" },
+          },
+        }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      captions?: { playerCaptionsTracklistRenderer?: { captionTracks?: CaptionTrack[] } };
+    };
+    const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    if (!Array.isArray(tracks) || tracks.length === 0) return null;
+    for (const t of tracks) {
+      if (typeof t.baseUrl === "string") t.baseUrl = t.baseUrl.replace(/\\u0026/g, "&");
+    }
+    return pickPreferredTrack(tracks);
+  } catch {
+    return null;
+  }
+}
+
+function extractCaptionTracks(html: string): CaptionTrack[] | null {
+  const marker = html.indexOf('"captionTracks"');
+  if (marker === -1) return null;
+  const arrStart = html.indexOf("[", marker);
+  if (arrStart === -1) return null;
   let depth = 0;
   let end = -1;
-  for (let i = start; i < html.length; i++) {
+  for (let i = arrStart; i < html.length; i++) {
     const ch = html[i];
-    if (ch === "{") depth++;
-    else if (ch === "}") {
+    if (ch === "[") depth++;
+    else if (ch === "]") {
       depth--;
       if (depth === 0) {
         end = i;
@@ -73,22 +124,42 @@ async function findCaptionTrack(videoId: string): Promise<CaptionTrack | null> {
     }
   }
   if (end === -1) return null;
-
-  let parsed: { captionTracks?: CaptionTrack[] };
   try {
-    parsed = JSON.parse(html.slice(start, end + 1));
+    const tracks = JSON.parse(html.slice(arrStart, end + 1)) as CaptionTrack[];
+    if (!Array.isArray(tracks) || tracks.length === 0) return null;
+    for (const t of tracks) {
+      if (typeof t.baseUrl === "string") t.baseUrl = t.baseUrl.replace(/\\u0026/g, "&");
+    }
+    return tracks;
   } catch {
     return null;
   }
-  const tracks = parsed.captionTracks;
-  if (!Array.isArray(tracks) || tracks.length === 0) return null;
+}
 
-  // Prefer a human-authored English track, then any English, then anything.
+function pickPreferredTrack(tracks: CaptionTrack[]): CaptionTrack {
   return (
     tracks.find((t) => !t.kind && t.languageCode?.startsWith("en")) ??
     tracks.find((t) => t.languageCode?.startsWith("en")) ??
     tracks[0]
   );
+}
+
+/** Try each candidate track until one actually returns caption text. */
+async function firstTrackWithPayload(tracks: CaptionTrack[]): Promise<CaptionTrack | null> {
+  const ordered = [
+    ...tracks.filter((t) => !t.kind && t.languageCode?.startsWith("en")),
+    ...tracks.filter((t) => t.languageCode?.startsWith("en")),
+    ...tracks,
+  ];
+  for (const track of ordered) {
+    try {
+      const payload = await get(`${track.baseUrl}&fmt=json3`);
+      if (payload.trim().length > 0) return track;
+    } catch {
+      // Try the next track.
+    }
+  }
+  return null;
 }
 
 function decodeEntities(s: string): string {
@@ -163,7 +234,6 @@ export async function fetchTranscriptForVideo(videoUrl: string): Promise<VideoTr
     wordCount: text ? text.split(/\s+/).length : 0,
   };
 }
-
 /** Fetch transcripts for a bounded number of videos, in small parallel batches. */
 export async function fetchTranscripts(
   videos: VideoSample[],

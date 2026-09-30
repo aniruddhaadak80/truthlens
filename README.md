@@ -21,9 +21,14 @@ produced it.
   clickbait pressure, sentiment balance, cadence consistency, transparency, plus
   **source citation** and **falsifiability** derived from what the creator actually
   says. Every factor carries itemized evidence and a weighted contribution.
-- **Reads the captions, not just the titles** — pulls public transcript data and scores
+- **Reads the captions, not just the titles** — pulls public caption tracks and scores
   spoken sourcing, hedging, and self-correction. Coverage is always labelled
   (`full` / `partial` / `titles-only`) so a score is never quietly based on less than it claims.
+  > **Caption availability note:** YouTube serves caption payloads only to residential
+  > networks. When TruthLens runs from a datacenter or serverless host, captions usually
+  > return empty and the report says `titles-only` — in that case the spoken factors score
+  > neutral rather than penalising a channel that could not be heard, and the
+  > recommendation says so explicitly.
 - **Claim ledger** — extracts real assertions and classifies each as empirical, causal,
   predictive, normative, or vague, with hedge and overclaim ratios and a
   load-bearing flag. Deceptively-cited claims surface first.
