@@ -6,7 +6,11 @@ import { ScoreGauge } from "@/components/score-gauge";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { ReportVisuals } from "@/components/report-visuals";
 import { ReportActions } from "@/components/report-actions";
+import { ClaimLedger, CoverageBadge } from "@/components/claim-ledger";
+import { DriftPanel, OutlierList } from "@/components/drift-panel";
+import { getDrift } from "@/lib/service";
 import { verifyChain } from "@/lib/integrity/chain";
+import { analyzeChannel } from "@/lib/engine/credibility";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +23,16 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
 
   const auditEvents = await repo.listAudit("report", id, 50);
   const chain = verifyChain(auditEvents);
+  const drift = await getDrift(report.channel_id).catch(() => null);
+
+  // Re-derive the claim ledger and outliers from the stored per-video metadata
+  // so the page reflects exactly what was scored at analysis time.
+  const videos = report.sample_videos;
+  const engine = analyzeChannel({ channelTitle: report.channel_title, videos });
+  const meanVideo =
+    videos.filter((v) => typeof v.perVideoScore === "number").reduce((s, v) => s + (v.perVideoScore ?? 0), 0) /
+    Math.max(1, videos.filter((v) => typeof v.perVideoScore === "number").length);
+
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
@@ -55,6 +69,10 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
                 <span className={`font-mono ${report.feed_status === "live" ? "text-mint" : "text-amber"}`}>
                   {report.feed_status === "live" ? "live" : "fallback sample"}
                 </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-fog">Captions</span>
+                <CoverageBadge coverage={engine.transcriptCoverage} />
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-fog">Analyzed</span>
@@ -109,6 +127,22 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
             )}
           </div>
         </div>
+
+        {drift && drift.points.length > 0 && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DriftPanel drift={drift} />
+            <OutlierList outliers={engine.outliers} meanScore={Math.round(meanVideo)} />
+          </div>
+        )}
+
+        <ClaimLedger
+          claims={engine.claims.claims}
+          byCategory={engine.claims.byCategory}
+          hedgeRatio={engine.claims.hedgeRatio}
+          overclaimRatio={engine.claims.overclaimRatio}
+          falsifiableRatio={engine.claims.falsifiableRatio}
+          coverageLabel={engine.claims.coverageLabel}
+        />
       </div>
     </div>
   );

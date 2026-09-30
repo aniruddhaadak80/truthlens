@@ -8,8 +8,8 @@ produced it.
 [![GitHub](https://img.shields.io/badge/github-aniruddhaadak80%2Ftruthlens-a78bfa?style=flat-square&logo=github)](https://github.com/aniruddhaadak80/truthlens)
 [![License](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)](LICENSE)
 [![Stack](https://img.shields.io/badge/stack-Next.js%2016%20%2B%20Neon%20Postgres-fbbf24?style=flat-square)](https://nextjs.org)
-[![Engine](https://img.shields.io/badge/engine-deterministic%20v2026.1.0-a78bfa?style=flat-square)](src/lib/engine/credibility.ts)
-[![Agent](https://img.shields.io/badge/agent-MCP%20JSON--RPC%202.0-34d399?style=flat-square)](public/mcp.json)
+[![Engine](https://img.shields.io/badge/engine-deterministic%20v2026.2.0-a78bfa?style=flat-square)](src/lib/engine/credibility.ts)
+[![Agent](https://img.shields.io/badge/agent-MCP%20%2B%208%20tools-34d399?style=flat-square)](public/mcp.json)
 
 | [Live App](https://truthlens-virid.vercel.app) · [GitHub](https://github.com/aniruddhaadak80/truthlens) · [API](https://truthlens-virid.vercel.app/api/health) · [Agent](https://truthlens-virid.vercel.app/agent) · [Issues](https://github.com/aniruddhaadak80/truthlens/issues) |
 
@@ -17,21 +17,31 @@ produced it.
 
 ## ✨ Features
 
-- **Six-signal credibility engine** — claim discipline, controversy temperature,
-  clickbait pressure, sentiment balance, cadence consistency, and transparency,
-  each with itemized evidence phrases and a weighted contribution to the 0–100 score.
-- **Live public data, honestly labeled** — reads the channel's public YouTube RSS
-  feed and oEmbed metadata (no API key). When the live feed is unreachable, a
+- **Eight-signal credibility engine** — claim discipline, controversy temperature,
+  clickbait pressure, sentiment balance, cadence consistency, transparency, plus
+  **source citation** and **falsifiability** derived from what the creator actually
+  says. Every factor carries itemized evidence and a weighted contribution.
+- **Reads the captions, not just the titles** — pulls public transcript data and scores
+  spoken sourcing, hedging, and self-correction. Coverage is always labelled
+  (`full` / `partial` / `titles-only`) so a score is never quietly based on less than it claims.
+- **Claim ledger** — extracts real assertions and classifies each as empirical, causal,
+  predictive, normative, or vague, with hedge and overclaim ratios and a
+  load-bearing flag. Deceptively-cited claims surface first.
+- **Per-video outliers** — a strong channel average can hide a few bad episodes. Every
+  sampled video is scored independently and the weak ones are listed with their flags.
+- **Credibility drift** — each analysis records a snapshot, so the trend over time is
+  visible: direction, score delta, and which factor moved most.
+- **Head-to-head comparison** — put two reports side by side and see exactly which
+  factors drive the gap.
+- **Live public data, honestly labeled** — reads the channel's public YouTube RSS feed,
+  oEmbed metadata, and captions (no API key). When the live feed is unreachable, a
   sealed offline sample is clearly marked `fallback` and never presented as a real channel.
-- **Explainable refraction** — a prism diagram splits the signal into six beams
-  whose widths equal each factor's contribution; selecting a factor highlights the
-  exact phrases in the channel's videos that moved its score.
 - **Auditable integrity chain** — every create, update, and delete appends a
   SHA-384 sealed event (`seal_n = SHA-384(prevSeal ‖ canonicalJson(event_n))`).
-  Replay the chain anytime to detect tampering.
-- **Agent-ready** — a JSON-RPC 2.0 MCP endpoint (`POST /api/mcp`) with tools to
-  analyze, read, decide, and verify, backed by the same service layer as the UI.
-  Manifest at [`public/mcp.json`](public/mcp.json).
+  Each entity chains independently, so any report replays in isolation.
+- **Agent-ready** — a JSON-RPC 2.0 MCP endpoint (`POST /api/mcp`) with eight tools to
+  analyze, read, decide, verify, read drift, compare, and extract claims — all backed
+  by the same service layer as the UI. Manifest at [`public/mcp.json`](public/mcp.json).
 - **Export & share** — download a self-contained JSON report or copy a public
   share link. Exports include source attribution, timestamps, and a disclaimer.
 - **Session-scoped workspace** — reports persist per browser session (HTTP-only
@@ -98,6 +108,10 @@ Soft-deletes (tombstone) and appends a `delete` audit event.
 | GET | `/api/health` | Store check (verifies the real database) |
 | GET | `/api/feed?url=…` | Normalized live feed with source metadata |
 | GET | `/api/reports` | List reports for the current session |
+| GET | `/api/claims?url=…` | Claim ledger for a channel without saving a report |
+| GET | `/api/drift?report=<id>` | Credibility trend for a channel |
+| POST | `/api/compare` | Compare two reports factor by factor |
+| POST | `/api/reports/<id>/reanalyze` | Re-score and record a new drift snapshot |
 | GET | `/api/verify?entity=<id>` | Replay the seal chain |
 | GET | `/api/export/<id>` | Download a JSON report |
 | POST | `/api/mcp` | JSON-RPC 2.0 agent endpoint |
@@ -108,7 +122,8 @@ TruthLens exposes a live MCP-style endpoint. Configure any MCP client with the
 manifest at `https://truthlens-virid.vercel.app/mcp.json` (endpoint `POST /api/mcp`).
 
 Tools: `analyze_channel`, `get_report`, `list_reports`,
-`update_report_decision` (mutating, idempotent), `verify_integrity`.
+`update_report_decision` (mutating, idempotent), `verify_integrity`,
+`get_channel_drift`, `compare_reports`, `extract_claims`.
 
 ```bash
 curl -X POST https://truthlens-virid.vercel.app/api/mcp \
@@ -127,7 +142,8 @@ calls and a raw request/response log.
 | --- | --- |
 | `/` | Landing with the analyzer and live aggregate stats |
 | `/reports` | Session workspace: filter, sort, search saved reports |
-| `/reports/[id]` | Report detail: score, refraction, factors, evidence, actions |
+| `/reports/[id]` | Report detail: score, refraction, factors, evidence, claim ledger, drift, outliers, actions |
+| `/compare` | Head-to-head comparison of two saved reports |
 | `/agent` | Live MCP agent console |
 | `/export` | Export center: download JSON, copy share links |
 | `/settings` | Engine weights (persisted per session) and danger zone |
@@ -141,6 +157,10 @@ calls and a raw request/response log.
 | `/api/analyze` | POST |
 | `/api/reports` | GET |
 | `/api/reports/[id]` | GET, PATCH, DELETE |
+| `/api/reports/[id]/reanalyze` | POST |
+| `/api/drift` | GET |
+| `/api/compare` | POST |
+| `/api/claims` | GET |
 | `/api/health` | GET |
 | `/api/feed` | GET |
 | `/api/verify` | GET |
@@ -153,13 +173,15 @@ calls and a raw request/response log.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/lib/engine/credibility.ts` | Deterministic, versioned scoring engine |
+| `src/lib/engine/credibility.ts` | Deterministic, versioned scoring engine (v2026.2.0) |
+| `src/lib/engine/claims.ts` | Claim extraction and the falsifiability taxonomy |
 | `src/lib/youtube/fetch.ts` | Keyless YouTube RSS + oEmbed fetching |
+| `src/lib/youtube/transcript.ts` | Caption retrieval and parsing |
 | `src/lib/integrity/chain.ts` | SHA-384 seal chain and replay |
 | `src/lib/db/` | Repository interface; PGlite (local) and pg/Neon (production) adapters |
 | `src/lib/service.ts` | Shared service layer used by UI and agent tools |
 | `src/middleware.ts` | Anonymous session-cookie bootstrap |
-| `src/components/` | UI components (refraction lens, factor breakdown, agent console) |
+| `src/components/` | UI components (refraction lens, claim ledger, drift panel, compare workbench) |
 
 ## 🏗️ Architecture
 
@@ -212,28 +234,34 @@ graph TB
 
 ```mermaid
 graph LR
-  IN[Channel metadata] --> F1[Claim discipline]
+  IN[Channel metadata<br/>+ captions] --> F1[Claim discipline]
   IN --> F2[Controversy temperature]
   IN --> F3[Clickbait pressure]
   IN --> F4[Sentiment balance]
   IN --> F5[Cadence consistency]
   IN --> F6[Transparency]
+  IN --> F7[Source citation]
+  IN --> F8[Falsifiability]
   F1 --> W[Weighted sum]
   F2 --> W
   F3 --> W
   F4 --> W
   F5 --> W
   F6 --> W
+  F7 --> W
+  F8 --> W
   W --> SCORE[0-100 score]
-  SCORE --> VERDICT[Verdict + recommendation]
+  SCORE --> V[Verdict + recommendation]
+  SCORE --> PV[Per-video scores]
   classDef engine fill:#a78bfa,stroke:#6d28d9,color:#ffffff
-  classDef infra fill:#94a3b8,stroke:#475569,color:#ffffff
-  class IN,F1,F2,F3,F4,F5,F6,W,SCORE,VERDICT engine
+  classDef live fill:#22d3ee,stroke:#0e7490,color:#06222a
+  class IN,F1,F2,F3,F4,F5,F6,F7,F8,W,SCORE,V,PV engine
 ```
 
-Each factor returns a 0–100 score, a weight, a contribution, an explanation, and
-evidence phrases. The same `analyzeChannel` function powers the UI, the REST
-endpoint, and the agent tool. Weights are configurable per session in Settings.
+`source_citation` and `falsifiability` read the spoken content. When captions are
+unavailable they return a neutral score and the report says `titles-only` rather than
+penalising a channel that could not be heard. The same `analyzeChannel` function powers
+the UI, the REST endpoints, and the agent tools, so a score is always reproducible.
 
 ## 🔗 Integrity and seal replay
 
@@ -292,40 +320,41 @@ graph LR
 ## 🗺️ Roadmap
 
 ### Now
-- [x] Six-signal deterministic engine with evidence phrases
-- [x] Live YouTube RSS + oEmbed pipeline with labeled fallback
-- [x] Session workspace with full CRUD, notes, and verdicts
-- [x] SHA-384 audit chain with replay
-- [x] MCP agent console and tools
-- [x] JSON export and public share links
+- [x] Eight-signal deterministic engine, two factors driven by captions
+- [x] Claim ledger with a falsifiability taxonomy
+- [x] Per-video outlier detection
+- [x] Credibility drift across repeated analyses
+- [x] Head-to-head report comparison
+- [x] Eight MCP tools on a shared service layer
+- [x] JSON export, public share links, and an audited integrity chain
 
 ```mermaid
 graph LR
-  NOW[Now: analyze, decide, verify, export] --> USERS[Everyday users]
+  NOW[Now: engine, claims, drift, compare] --> DECIDE[Faster trust decisions]
   classDef agent fill:#34d399,stroke:#047857,color:#06222a
-  class NOW,USERS agent
+  class NOW,DECIDE agent
 ```
 
 ### Next
-- [ ] Compare two channels side by side (user outcome: faster A/B credibility calls)
-- [ ] Weekly re-analysis watchlist with change summaries (user outcome: notice drift over time)
+- [ ] Browser extension for one-click analysis on YouTube (user outcome: no copy-paste)
+- [ ] Weekly drift alerts when a watched channel's score moves (user outcome: notice change without checking)
 
 ```mermaid
 graph LR
-  NEXT[Next: compare + watchlist] --> DRIFT[Drift summaries]
+  NEXT[Next: extension + drift alerts] --> REACH[Passive monitoring]
   classDef live fill:#22d3ee,stroke:#0e7490,color:#06222a
-  class NEXT,DRIFT live
+  class NEXT,REACH live
 ```
 
 ### Later
-- [ ] Browser extension for one-click analysis on YouTube (user outcome: no copy-paste)
 - [ ] Community lexicon contributions with review (user outcome: sharper, fresher signals)
+- [ ] Transcript-level claim graph linking repeated assertions across videos (user outcome: spot evolving narratives)
 
 ```mermaid
 graph LR
-  LATER[Later: extension + community lexicons] --> REACH[Wider distribution]
+  LATER[Later: community lexicons, claim graphs] --> MATURITY[Ecosystem]
   classDef engine fill:#a78bfa,stroke:#6d28d9,color:#ffffff
-  class LATER,REACH engine
+  class LATER,MATURITY engine
 ```
 
 ## ⚠️ Safety disclaimer
@@ -336,8 +365,8 @@ non-English content. Verify important claims independently before acting on them
 
 ## 🙏 Attribution
 
-- Video metadata: [YouTube RSS feeds](https://www.youtube.com/feeds/videos.xml)
-  and [oEmbed](https://www.youtube.com/oembed) — public, keyless endpoints.
+- Video metadata and captions: [YouTube RSS feeds](https://www.youtube.com/feeds/videos.xml),
+  [oEmbed](https://www.youtube.com/oembed), and public caption tracks — keyless endpoints.
 - Fonts: [Space Grotesk](https://fonts.google.com/specimen/Space+Grotesk) and
   [IBM Plex Mono](https://fonts.google.com/specimen/IBM+Plex+Mono) (OFL),
   self-hosted in `public/fonts/`.

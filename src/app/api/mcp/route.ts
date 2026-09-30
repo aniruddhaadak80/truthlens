@@ -1,4 +1,10 @@
-import { analyzeAndSave, updateReportDecision, verifyIntegrity } from "@/lib/service";
+import {
+  analyzeAndSave,
+  updateReportDecision,
+  verifyIntegrity,
+  getDrift,
+  compareReports,
+} from "@/lib/service";
 import { getRepository } from "@/lib/db";
 import { getSessionId } from "@/lib/session";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
@@ -71,6 +77,44 @@ const TOOLS = [
         report_id: { type: "string", description: "Optional: verify only one report's events" },
       },
       required: [],
+    },
+  },
+  {
+    name: "get_channel_drift",
+    description:
+      "Read the credibility trend for a channel across past analyses: current score, direction, and the factor that moved most.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        report_id: { type: "string", description: "Any report for the channel" },
+        channel_id: { type: "string", description: "Or the channel id directly" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "compare_reports",
+    description:
+      "Compare two saved reports factor by factor and return the winner with the score gap.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        left_id: { type: "string" },
+        right_id: { type: "string" },
+      },
+      required: ["left_id", "right_id"],
+    },
+  },
+  {
+    name: "extract_claims",
+    description:
+      "Re-run the engine on a channel and return its claim ledger: extracted claims classified as empirical, causal, predictive, normative, or vague, with hedge and overclaim ratios.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "YouTube channel or video URL" },
+      },
+      required: ["url"],
     },
   },
 ];
@@ -175,6 +219,56 @@ async function handleToolCall(
           },
         ],
         structuredContent: result,
+      };
+    }
+    case "get_channel_drift": {
+      const channelId = args.channel_id !== undefined ? requireString(args.channel_id, "channel_id") : undefined;
+      let target = channelId;
+      if (!target) {
+        const reportId = requireString(args.report_id, "report_id");
+        const repo = await getRepository();
+        const report = await repo.getReport(reportId, sessionId);
+        if (!report) {
+          return { content: [{ type: "text", text: `Report ${reportId} not found in this session.` }] };
+        }
+        target = report.channel_id;
+      }
+      const drift = await getDrift(target);
+      return {
+        content: [{ type: "text", text: drift.summary }],
+        structuredContent: drift,
+      };
+    }
+    case "compare_reports": {
+      const leftId = requireString(args.left_id, "left_id");
+      const rightId = requireString(args.right_id, "right_id");
+      const comparison = await compareReports(leftId, rightId, sessionId);
+      return {
+        content: [{ type: "text", text: comparison.summary }],
+        structuredContent: comparison,
+      };
+    }
+    case "extract_claims": {
+      const url = requireString(args.url, "url");
+      const { report, engine } = await analyzeAndSave(url, sessionId);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Extracted ${engine.claims.claims.length} claims from ${engine.claims.analyzedUnits} units (${engine.claims.coverageLabel}). ${(engine.claims.falsifiableRatio * 100).toFixed(0)}% falsifiable, overclaim ratio ${(engine.claims.overclaimRatio * 100).toFixed(0)}%. Report saved as ${report.id}.`,
+          },
+        ],
+        structuredContent: {
+          report_id: report.id,
+          transcript_coverage: engine.transcriptCoverage,
+          coverage_label: engine.claims.coverageLabel,
+          by_category: engine.claims.byCategory,
+          hedge_ratio: engine.claims.hedgeRatio,
+          overclaim_ratio: engine.claims.overclaimRatio,
+          falsifiable_ratio: engine.claims.falsifiableRatio,
+          claims: engine.claims.claims.slice(0, 15),
+          url: `/reports/${report.id}`,
+        },
       };
     }
     default:

@@ -21,11 +21,25 @@ const QUICK_CALLS = [
     method: "tools/call",
     params: { name: "analyze_channel", arguments: { url: "https://www.youtube.com/@veritasium" } },
   },
+  {
+    label: "extract claims",
+    method: "tools/call",
+    params: { name: "extract_claims", arguments: { url: "https://www.youtube.com/@veritasium" } },
+  },
   { label: "list reports", method: "tools/call", params: { name: "list_reports", arguments: { limit: 5 } } },
   { label: "verify integrity", method: "tools/call", params: { name: "verify_integrity", arguments: {} } },
 ];
 
-const TOOL_NAMES = ["analyze_channel", "get_report", "list_reports", "update_report_decision", "verify_integrity"];
+const TOOL_NAMES = [
+  "analyze_channel",
+  "get_report",
+  "list_reports",
+  "update_report_decision",
+  "verify_integrity",
+  "get_channel_drift",
+  "compare_reports",
+  "extract_claims",
+];
 
 export function AgentConsole() {
   const [entries, setEntries] = useState<RpcEntry[]>([]);

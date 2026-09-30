@@ -2,7 +2,7 @@
   "$schema": "https://modelcontextprotocol.io/schema.json",
   "name": "truthlens",
   "description": "YouTube creator credibility analysis with deterministic, explainable scoring and an auditable seal chain.",
-  "version": "2026.1.0",
+  "version": "2026.2.0",
   "endpoint": "/api/mcp",
   "protocol": "jsonrpc-2.0",
   "transport": "http",
@@ -11,7 +11,10 @@
     "get_report",
     "list_reports",
     "update_report_decision",
-    "verify_integrity"
+    "verify_integrity",
+    "get_channel_drift",
+    "compare_reports",
+    "extract_claims"
   ],
   "repository": "https://github.com/aniruddhaadak80/truthlens",
   "liveUrl": "https://truthlens-virid.vercel.app"

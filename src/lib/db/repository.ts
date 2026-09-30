@@ -24,6 +24,29 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 CREATE INDEX IF NOT EXISTS idx_reports_session ON reports(session_id, deleted_at, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_channel ON reports(channel_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS channel_snapshots (
+  id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  channel_title TEXT NOT NULL,
+  engine_version TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  verdict TEXT NOT NULL,
+  factor_scores JSONB NOT NULL DEFAULT '{}'::jsonb,
+  transcript_coverage TEXT NOT NULL DEFAULT 'titles-only',
+  analyzed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots_channel ON channel_snapshots(channel_id, analyzed_at DESC);
+CREATE TABLE IF NOT EXISTS comparisons (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  left_report_id TEXT NOT NULL,
+  right_report_id TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  rationale TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_comparisons_session ON comparisons(session_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS audit_events (
   id BIGSERIAL PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -65,6 +88,70 @@ export interface ReportListOptions {
   includeDeleted?: boolean;
 }
 
+export interface SnapshotInput {
+  id: string;
+  channel_id: string;
+  channel_title: string;
+  engine_version: string;
+  score: number;
+  verdict: string;
+  factor_scores: Record<string, number>;
+  transcript_coverage: string;
+}
+
+export interface SnapshotRow {
+  id: string;
+  channel_id: string;
+  channel_title: string;
+  engine_version: string;
+  score: number;
+  verdict: string;
+  factor_scores: Record<string, number>;
+  transcript_coverage: string;
+  analyzed_at: string;
+}
+
+export interface ComparisonRow {
+  id: string;
+  session_id: string;
+  left_report_id: string;
+  right_report_id: string;
+  verdict: string;
+  rationale: string;
+  created_at: string;
+}
+
+export interface DriftPoint {
+  analyzedAt: string;
+  score: number;
+  verdict: string;
+  factorScores: Record<string, number>;
+  transcriptCoverage: string;
+  engineVersion: string;
+}
+
+export interface DriftReport {
+  channelId: string;
+  channelTitle: string;
+  points: DriftPoint[];
+  current: number | null;
+  previous: number | null;
+  delta: number | null;
+  direction: "rising" | "falling" | "stable" | "unknown";
+  biggestMover: { key: string; delta: number } | null;
+  summary: string;
+}
+
+export interface Comparison {
+  left: { id: string; title: string; score: number; verdict: string; factors: Record<string, number> };
+  right: { id: string; title: string; score: number; verdict: string; factors: Record<string, number> };
+  winner: "left" | "right" | "tie";
+  scoreGap: number;
+  factorGaps: { key: string; label: string; delta: number }[];
+  summary: string;
+}
+
+
 export interface Repository {
   readonly kind: "pglite" | "pg";
   init(): Promise<void>;
@@ -77,6 +164,20 @@ export interface Repository {
     sessionId: string,
     patch: { note?: string; user_verdict?: string },
   ): Promise<ReportRow | null>;
+  updateReportWithAnalysis(
+    id: string,
+    sessionId: string,
+    patch: {
+      engine_version: string;
+      score: number;
+      verdict: string;
+      factors: ReportRow["factors"];
+      signals: ReportRow["signals"];
+      sample_videos: ReportRow["sample_videos"];
+      feed_status: ReportRow["feed_status"];
+      video_count: number;
+    },
+  ): Promise<ReportRow | null>;
   deleteReport(id: string, sessionId: string): Promise<boolean>;
   countReports(sessionId: string): Promise<number>;
   countAllReports(): Promise<number>;
@@ -87,5 +188,9 @@ export interface Repository {
   getSettings(sessionId: string): Promise<Record<string, number> | null>;
   saveSettings(sessionId: string, weights: Record<string, number>): Promise<void>;
   deleteAllReports(sessionId: string): Promise<number>;
+  recordSnapshot(s: SnapshotInput): Promise<void>;
+  listSnapshots(channelId: string, limit: number): Promise<SnapshotRow[]>;
+  createComparison(c: Omit<ComparisonRow, "created_at">): Promise<ComparisonRow>;
+  listComparisons(sessionId: string, limit: number): Promise<ComparisonRow[]>;
   ping(): Promise<boolean>;
 }

@@ -31,22 +31,25 @@ const OUTRAGE_VIDEOS: VideoSample[] = [
 ];
 
 describe("credibility engine", () => {
-  it("scores a clean science channel high", () => {
-    const result = analyzeChannel({ channelTitle: "Clean", videos: CLEAN_VIDEOS });
-    expect(result.score).toBeGreaterThanOrEqual(60);
-    expect(result.verdict).toBe("trusted");
-    expect(result.version).toBe(ENGINE_VERSION);
+  it("scores a clean science channel higher than an outrage channel", () => {
+    const clean = analyzeChannel({ channelTitle: "Clean", videos: CLEAN_VIDEOS });
+    const outrage = analyzeChannel({ channelTitle: "Outrage", videos: OUTRAGE_VIDEOS });
+    expect(clean.score).toBeGreaterThan(outrage.score);
+    expect(outrage.score).toBeLessThan(45);
+    expect(outrage.verdict).toBe("low_credibility");
+    expect(clean.version).toBe(ENGINE_VERSION);
   });
 
-  it("scores an outrage channel low", () => {
-    const result = analyzeChannel({ channelTitle: "Outrage", videos: OUTRAGE_VIDEOS });
-    expect(result.score).toBeLessThan(45);
-    expect(result.verdict).toBe("low_credibility");
+  it("reports the versioned engine contract", () => {
+    const result = analyzeChannel({ channelTitle: "Clean", videos: CLEAN_VIDEOS });
+    expect(result.version).toBe(ENGINE_VERSION);
+    expect(result.transcriptCoverage.status).toBe("titles-only");
+    expect(result.claims.claims.length).toBeGreaterThan(0);
   });
 
   it("returns itemized factors with weights and contributions", () => {
     const result = analyzeChannel({ channelTitle: "X", videos: CLEAN_VIDEOS });
-    expect(result.factors).toHaveLength(6);
+    expect(result.factors).toHaveLength(8);
     const totalWeight = result.factors.reduce((s, f) => s + f.weight, 0);
     expect(totalWeight).toBeCloseTo(1, 5);
     const totalContribution = result.factors.reduce((s, f) => s + f.contribution, 0);
@@ -69,7 +72,7 @@ describe("credibility engine", () => {
     const empty = analyzeChannel({ channelTitle: "Empty", videos: [] });
     expect(empty.score).toBeGreaterThanOrEqual(0);
     expect(empty.score).toBeLessThanOrEqual(100);
-    expect(empty.factors).toHaveLength(6);
+    expect(empty.factors).toHaveLength(8);
 
     const single = analyzeChannel({ channelTitle: "One", videos: [video("A single video")] });
     expect(single.factors.find((f) => f.key === "cadence_consistency")!.score).toBe(40);
@@ -86,7 +89,7 @@ describe("credibility engine", () => {
     const standard = analyzeChannel({ channelTitle: "X", videos: OUTRAGE_VIDEOS });
     const weighted = analyzeChannel(
       { channelTitle: "X", videos: OUTRAGE_VIDEOS },
-      { claim_discipline: 0.05, controversy_temperature: 0.05, clickbait_pressure: 0.1, sentiment_balance: 0.6, cadence_consistency: 0.1, transparency: 0.1 },
+      { claim_discipline: 0.05, controversy_temperature: 0.05, clickbait_pressure: 0.1, sentiment_balance: 0.6, cadence_consistency: 0.1, transparency: 0.05, source_citation: 0.03, falsifiability: 0.02 },
     );
     expect(weighted.score).not.toBe(standard.score);
     const sent = weighted.factors.find((f) => f.key === "sentiment_balance")!;

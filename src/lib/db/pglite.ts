@@ -139,6 +139,41 @@ export async function createPgliteRepository(): Promise<Repository> {
       return res.rows.length ? mapReport(res.rows[0] as ReportRecord) : null;
     },
 
+    async updateReportWithAnalysis(
+      id: string,
+      sessionId: string,
+      patch: {
+        engine_version: string;
+        score: number;
+        verdict: string;
+        factors: ReportRow["factors"];
+        signals: ReportRow["signals"];
+        sample_videos: ReportRow["sample_videos"];
+        feed_status: ReportRow["feed_status"];
+        video_count: number;
+      },
+    ): Promise<ReportRow | null> {
+      const res = await client.query(
+        `UPDATE reports
+         SET engine_version = $3, score = $4, verdict = $5, factors = $6, signals = $7,
+             sample_videos = $8, feed_status = $9, video_count = $10, updated_at = now()
+         WHERE id = $1 AND session_id = $2 AND deleted_at IS NULL RETURNING *`,
+        [
+          id,
+          sessionId,
+          patch.engine_version,
+          patch.score,
+          patch.verdict,
+          JSON.stringify(patch.factors),
+          JSON.stringify(patch.signals),
+          JSON.stringify(patch.sample_videos),
+          patch.feed_status,
+          patch.video_count,
+        ],
+      );
+      return res.rows.length ? mapReport(res.rows[0] as ReportRecord) : null;
+    },
+
     async deleteReport(id: string, sessionId: string): Promise<boolean> {
       const res = await client.query(
         `UPDATE reports SET deleted_at = now(), updated_at = now() WHERE id = $1 AND session_id = $2 AND deleted_at IS NULL`,
@@ -248,6 +283,120 @@ export async function createPgliteRepository(): Promise<Repository> {
         [sessionId],
       );
       return res.affectedRows ?? 0;
+    },
+
+    async recordSnapshot(s: {
+      id: string;
+      channel_id: string;
+      channel_title: string;
+      engine_version: string;
+      score: number;
+      verdict: string;
+      factor_scores: Record<string, number>;
+      transcript_coverage: string;
+    }): Promise<void> {
+      await client.query(
+        `INSERT INTO channel_snapshots (id, channel_id, channel_title, engine_version, score, verdict, factor_scores, transcript_coverage)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          s.id,
+          s.channel_id,
+          s.channel_title,
+          s.engine_version,
+          s.score,
+          s.verdict,
+          JSON.stringify(s.factor_scores),
+          s.transcript_coverage,
+        ],
+      );
+    },
+
+    async listSnapshots(
+      channelId: string,
+      limit: number,
+    ): Promise<import("./repository").SnapshotRow[]> {
+      const res = await client.query<{
+        id: string;
+        channel_id: string;
+        channel_title: string;
+        engine_version: string;
+        score: string;
+        verdict: string;
+        factor_scores: Record<string, number>;
+        transcript_coverage: string;
+        analyzed_at: Date;
+      }>(
+        `SELECT * FROM channel_snapshots WHERE channel_id = $1 ORDER BY analyzed_at DESC LIMIT $2`,
+        [channelId, Math.min(limit, 100)],
+      );
+      return res.rows
+        .map((r) => ({
+          id: r.id,
+          channel_id: r.channel_id,
+          channel_title: r.channel_title,
+          engine_version: r.engine_version,
+          score: Number(r.score),
+          verdict: r.verdict,
+          factor_scores: r.factor_scores,
+          transcript_coverage: r.transcript_coverage,
+          analyzed_at: new Date(r.analyzed_at).toISOString(),
+        }))
+        .reverse();
+    },
+
+    async createComparison(
+      c: Omit<import("./repository").ComparisonRow, "created_at">,
+    ): Promise<import("./repository").ComparisonRow> {
+      const res = await client.query<{
+        id: string;
+        session_id: string;
+        left_report_id: string;
+        right_report_id: string;
+        verdict: string;
+        rationale: string;
+        created_at: Date;
+      }>(
+        `INSERT INTO comparisons (id, session_id, left_report_id, right_report_id, verdict, rationale)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [c.id, c.session_id, c.left_report_id, c.right_report_id, c.verdict, c.rationale],
+      );
+      const r = res.rows[0];
+      return {
+        id: r.id,
+        session_id: r.session_id,
+        left_report_id: r.left_report_id,
+        right_report_id: r.right_report_id,
+        verdict: r.verdict,
+        rationale: r.rationale,
+        created_at: new Date(r.created_at).toISOString(),
+      };
+    },
+
+    async listComparisons(
+      sessionId: string,
+      limit: number,
+    ): Promise<import("./repository").ComparisonRow[]> {
+      const res = await client.query<{
+        id: string;
+        session_id: string;
+        left_report_id: string;
+        right_report_id: string;
+        verdict: string;
+        rationale: string;
+        created_at: Date;
+      }>(
+        `SELECT * FROM comparisons WHERE session_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [sessionId, Math.min(limit, 50)],
+      );
+      return res.rows.map((r) => ({
+        id: r.id,
+        session_id: r.session_id,
+        left_report_id: r.left_report_id,
+        right_report_id: r.right_report_id,
+        verdict: r.verdict,
+        rationale: r.rationale,
+        created_at: new Date(r.created_at).toISOString(),
+      }));
     },
 
     async ping(): Promise<boolean> {

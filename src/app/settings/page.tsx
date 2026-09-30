@@ -4,15 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save, Trash2 } from "lucide-react";
 import type { EngineWeights } from "@/lib/types";
+import { FACTOR_BLURBS, FACTOR_LABELS } from "@/lib/types";
 
-const FACTOR_META: { key: keyof EngineWeights; label: string; hint: string }[] = [
-  { key: "claim_discipline", label: "Claim discipline", hint: "Absolute claims and conspiracy markers" },
-  { key: "controversy_temperature", label: "Controversy temperature", hint: "Outrage and attack vocabulary" },
-  { key: "clickbait_pressure", label: "Clickbait pressure", hint: "Caps, bait phrases, punctuation spam" },
-  { key: "sentiment_balance", label: "Sentiment balance", hint: "Constructive vs fear-driven titles" },
-  { key: "cadence_consistency", label: "Cadence consistency", hint: "Upload regularity and recency" },
-  { key: "transparency", label: "Transparency", hint: "Description depth, links, disclosures" },
-];
+type WeightKey = keyof EngineWeights;
+
+const FACTOR_META: { key: WeightKey; label: string; hint: string }[] = (
+  Object.keys(FACTOR_LABELS) as WeightKey[]
+).map((key) => ({ key, label: FACTOR_LABELS[key], hint: FACTOR_BLURBS[key] }));
 
 export default function SettingsPage() {
   const router = useRouter();

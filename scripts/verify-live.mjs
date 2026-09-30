@@ -160,11 +160,16 @@ async function main() {
       params: { name: "update_report_decision", arguments: { report_id: reportId, note: "second write", idempotency_key: idemKey } },
     }),
   });
-  const idemRetry = await res10b.json();
+  const idemResult = await res10b.json();
+  check(
+    "agent mutations are idempotent (replayed key does not double-apply)",
+    idemResult?.result?.structuredContent?.id === reportId,
+    JSON.stringify(idemResult?.error ?? idemResult?.result?.structuredContent),
+  );
   const res10c = await call(`/api/reports/${reportId}`);
   const afterIdem = await res10c.json();
   check(
-    "agent mutations are idempotent (replayed key does not double-apply)",
+    "replayed idempotency key leaves the stored note unchanged",
     afterIdem?.report?.note === "first write",
     afterIdem?.report?.note,
   );
@@ -172,6 +177,50 @@ async function main() {
   const res11 = await call(`/api/verify?entity=${reportId}`);
   const verify = await res11.json();
   check("Integrity replay succeeds before deletion", res11.status === 200 && verify?.ok === true, JSON.stringify(verify));
+
+  const resDrift = await call(`/api/drift?report=${reportId}`);
+  const drift = await resDrift.json();
+  check(
+    "GET /api/drift returns a trend for the channel",
+    resDrift.status === 200 && Array.isArray(drift?.points) && drift.points.length > 0,
+    JSON.stringify({ points: drift?.points?.length, dir: drift?.direction }),
+  );
+
+  const resMcp8 = await call(`/api/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 6,
+      method: "tools/list",
+      params: {},
+    }),
+  });
+  const allTools = (await resMcp8.json())?.result?.tools?.map((t) => t.name) ?? [];
+  check(
+    "MCP exposes the v2 tools (drift, compare, claims)",
+    ["get_channel_drift", "compare_reports", "extract_claims"].every((n) => allTools.includes(n)),
+    JSON.stringify(allTools),
+  );
+
+  const resClaims = await call(`/api/claims?url=${encodeURIComponent(sampleUrl)}`);
+  const claims = await resClaims.json();
+  check(
+    "GET /api/claims returns a classified claim ledger",
+    resClaims.status === 200 && Array.isArray(claims?.claims) && claims.claims.length > 0,
+    JSON.stringify({ n: claims?.claims?.length, coverage: claims?.transcript_coverage?.status }),
+  );
+
+  const resCompare = await call(`/api/compare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ left_id: reportId, right_id: reportId }),
+  });
+  check(
+    "POST /api/compare rejects a self-comparison",
+    resCompare.status === 400,
+    `got ${resCompare.status}`,
+  );
 
   const res14 = await call(`/share/${reportId}`);
   const shareHtml = await res14.text();
