@@ -40,6 +40,14 @@ describe("claim classification", () => {
     expect(c.absoluteness).toBeGreaterThan(0);
   });
 
+  it("detects a percentage absolute, which a word boundary made unmatchable", () => {
+    // `\b100%\b` can never match: the position after "%" is not a word boundary unless
+    // the next character is a word character.
+    const c = classifyClaim("This study is 100% accurate.");
+    expect(c.absoluteness).toBeGreaterThan(0);
+    expect(c.stance).toBe("overclaim");
+  });
+
   it("recognises hedging", () => {
     const c = classifyClaim("This might be a partial explanation, and it probably varies.");
     expect(c.stance).toBe("hedge");
