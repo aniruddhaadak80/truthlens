@@ -90,7 +90,15 @@ function splitSentences(text: string): string[] {
 function countOccurrences(haystack: string, needles: string[]): number {
   let n = 0;
   for (const needle of needles) {
-    const re = new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // A word boundary is only meaningful at a side where the keyword actually ends on a
+    // word character. `\b100%\b` can never match: the position after "%" is a boundary
+    // only when the next character is a word character, and in a sentence it is a space,
+    // a comma or the end of the string. So the boundary is dropped on the sides the
+    // keyword cannot support.
+    const lead = /^\w/.test(needle) ? "\\b" : "";
+    const trail = /\w$/.test(needle) ? "\\b" : "";
+    const re = new RegExp(`${lead}${escaped}${trail}`, "gi");
     n += (haystack.match(re) || []).length;
   }
   return n;
